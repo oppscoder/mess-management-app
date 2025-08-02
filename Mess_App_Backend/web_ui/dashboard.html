@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mess ERP Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #f8f8f8; font-family: Arial, sans-serif; }
+        .header { background: #4CAF50; padding: 15px; color: white; text-align: center; font-size: 24px; }
+        th { background: #4CAF50; color: white; }
+    </style>
+</head>
+<body>
+
+<div class="header">Mess ERP Dashboard</div>
+
+<div class="container mt-4">
+    <div class="row text-center">
+        <div class="col-md-3"><div class="card p-3"><h5>Total Members</h5><p id="totalMembers">-</p></div></div>
+        <div class="col-md-3"><div class="card p-3"><h5>Today's Menu</h5><p id="todaysMenu">-</p></div></div>
+        <div class="col-md-3"><div class="card p-3"><h5>Meals Served</h5><p id="mealsToday">-</p></div></div>
+        <div class="col-md-3"><div class="card p-3"><h5>Monthly Expenses</h5><p id="monthlyExpenses">-</p></div></div>
+    </div>
+
+    <div class="mt-4 d-flex justify-content-between">
+        <h3>Stock List</h3>
+        <div>
+            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addItemModal">Add Item</button>
+            <button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#useItemModal">Use Item</button>
+        </div>
+    </div>
+
+    <table class="table table-bordered mt-2">
+        <thead>
+            <tr><th>Item Name</th><th>Quantity</th><th>Unit</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="stockTable"></tbody>
+    </table>
+
+    <h3 class="mt-5">Stock Quantity Chart</h3>
+    <canvas id="stockChart"></canvas>
+</div>
+
+<!-- Add Item Modal -->
+<div class="modal fade" id="addItemModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Add New Item</h5></div>
+      <div class="modal-body">
+        <input type="text" id="itemName" class="form-control mb-2" placeholder="Item Name">
+        <input type="number" id="itemQuantity" class="form-control mb-2" placeholder="Quantity">
+        <input type="text" id="itemUnit" class="form-control mb-2" placeholder="Unit (kg, liters, etc.)">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button class="btn btn-success" onclick="addItem()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Use Item Modal -->
+<div class="modal fade" id="useItemModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Use Item</h5></div>
+      <div class="modal-body">
+        <select id="useItemSelect" class="form-control mb-2"></select>
+        <input type="number" id="useQuantity" class="form-control mb-2" placeholder="Quantity Used">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button class="btn btn-warning" onclick="useItem()">Update</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let stockData = [];
+
+function loadDashboard() {
+    fetch('/stats')
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById("totalMembers").innerText = data.total_members;
+        document.getElementById("todaysMenu").innerText = data.todays_menu.join(", ");
+        document.getElementById("mealsToday").innerText = data.meals_served_today;
+        document.getElementById("monthlyExpenses").innerText = "₹" + data.monthly_expenses;
+    });
+
+    fetch('/items')
+    .then(res => res.json())
+    .then(data => {
+        stockData = data;
+        let rows = "";
+        let selectOptions = "";
+        data.forEach(item => {
+            rows += `<tr><td>${item.name}</td><td>${item.quantity}</td><td>${item.unit}</td>
+                     <td><button class="btn btn-danger btn-sm" onclick="deleteItem(${item.id})">Delete</button></td></tr>`;
+            selectOptions += `<option value="${item.id}">${item.name}</option>`;
+        });
+        document.getElementById("stockTable").innerHTML = rows;
+        document.getElementById("useItemSelect").innerHTML = selectOptions;
+        renderChart();
+    });
+}
+
+function renderChart() {
+    const ctx = document.getElementById('stockChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: stockData.map(i => i.name),
+            datasets: [{
+                label: 'Stock Quantity',
+                data: stockData.map(i => i.quantity),
+                backgroundColor: '#4CAF50'
+            }]
+        },
+        options: { responsive: true }
+    });
+}
+
+function addItem() {
+    const name = document.getElementById("itemName").value;
+    const quantity = parseFloat(document.getElementById("itemQuantity").value);
+    const unit = document.getElementById("itemUnit").value;
+    fetch('/add_item', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name, quantity, unit })
+    }).then(() => { loadDashboard(); });
+}
+
+function useItem() {
+    const id = parseInt(document.getElementById("useItemSelect").value);
+    const quantity_used = parseFloat(document.getElementById("useQuantity").value);
+    fetch('/use_item', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ id, quantity_used })
+    }).then(() => { loadDashboard(); });
+}
+
+function deleteItem(id) {
+    fetch('/delete_item', {
+        method: 'DELETE', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ id })
+    }).then(() => { loadDashboard(); });
+}
+
+loadDashboard();
+</script>
+</body>
+</html>
